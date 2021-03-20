@@ -1,3 +1,8 @@
+use std::error::Error;
+use std::path::Path;
+
+pub const TAG_ATTR_KEY: &'static str = "com.apple.metadata:_kMDItemUserTags";
+
 #[derive(Debug)]
 pub struct Tags {
     pub data: Vec<u8>,
@@ -18,6 +23,21 @@ impl Tags {
             .unwrap(),
         )
         // TODO: handle error
+    }
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
+        match xattr::get(path, TAG_ATTR_KEY) {
+            Ok(tags) => {
+                if let Some(tags) = tags {
+                    return Self::new(tags);
+                } else {
+                    panic!("The attribute {} is empty.", TAG_ATTR_KEY);
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to access the attribute {}.", TAG_ATTR_KEY);
+                panic!("{:?}", e);
+            }
+        }
     }
     pub fn parse(&self) -> Vec<String> {
         let n = self.data[8] as usize - 0xA0;
@@ -45,16 +65,21 @@ impl Tags {
                 }
                 let m = m as usize;
                 i += 1;
+
+                // TODO: handle color
                 if is_utf16 {
                     let j = i + 2 * m;
                     let slc = &self.data[i..j];
-                    let iter = (0..m).map(|i| u16::from_be_bytes([slc[2 * i], slc[2 * i + 1]]));
+                    let iter = (0..m)
+                        .map(|i| u16::from_be_bytes([slc[2 * i], slc[2 * i + 1]]))
+                        .take_while(|c| *c != 0x000A);
                     i = j;
                     String::from_utf16(&iter.collect::<Vec<u16>>()).unwrap()
                 } else {
                     let slc = &self.data[i..i + m];
                     i += m;
-                    String::from_utf8(slc.to_owned()).unwrap()
+                    String::from_utf8(slc.iter().cloned().take_while(|&c| c != 0x0A).collect())
+                        .unwrap()
                 }
             })
             .collect()
