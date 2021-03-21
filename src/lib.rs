@@ -1,11 +1,40 @@
-use std::error::Error;
+#![feature(exclusive_range_pattern)]
+#![feature(half_open_range_patterns)]
+
+use plist::Value;
 use std::path::Path;
+use std::{error::Error, io::BufReader};
+use thiserror::Error;
+// pub mod bplist;
 
 pub const TAG_ATTR_KEY: &'static str = "com.apple.metadata:_kMDItemUserTags";
+
+#[derive(Debug, Error)]
+pub enum MactagsError {
+    #[error("The attribute {} is empty.", TAG_ATTR_KEY)]
+    EmptyAttributeError,
+    #[error("Failed to access the attribute {}.", TAG_ATTR_KEY)]
+    AttributeAccessError,
+}
 
 #[derive(Debug)]
 pub struct Tags {
     pub data: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub struct Tag(String, Color);
+
+#[derive(Debug)]
+pub enum Color {
+    None,   // 0
+    Grey,   // 1
+    Green,  // 2
+    Purple, // 3
+    Blue,   // 4
+    Yellow, // 5
+    Red,    // 6
+    Orange, // 7
 }
 
 impl Tags {
@@ -24,67 +53,26 @@ impl Tags {
         )
         // TODO: handle error
     }
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, MactagsError> {
         match xattr::get(path, TAG_ATTR_KEY) {
             Ok(tags) => {
                 if let Some(tags) = tags {
-                    return Self::new(tags);
+                    Ok(Self::new(tags))
                 } else {
-                    panic!("The attribute {} is empty.", TAG_ATTR_KEY);
+                    Err(MactagsError::EmptyAttributeError)
                 }
             }
             Err(e) => {
-                eprintln!("Failed to access the attribute {}.", TAG_ATTR_KEY);
-                panic!("{:?}", e);
+                eprintln!("{:?}", e);
+                Err(MactagsError::AttributeAccessError)
             }
         }
     }
     pub fn from_tags(tags: Vec<String>) -> Self {
-        let mut data = b"bplist00".to_vec();
-        let n = tags.len();
-        if n < 0xF {
-            data.push(0xA0 + n as u8);
-        } else {
-            data.push(0xAF);
-            data.push(0x10);
-            data.push(n as u8);
-        }
-        for i in 1..=n as u8 {
-            data.push(i);
-        }
-        for tag in tags {
-            let l = tag.len();
-            let mut is_utf16 = false;
-            for c in tag.chars() {
-                if !c.is_ascii() {
-                    is_utf16 = true;
-                    break;
-                }
-            }
-            if is_utf16 {
-                if l < 0xF {
-                    data.push(0x60 + l as u8);
-                } else {
-                    data.push(0x6F);
-                    data.push(0x10);
-                    data.push(l as u8);
-                }
-                for [a, b] in tag.encode_utf16().map(|c| c.to_be_bytes()) {
-                    data.push(a);
-                    data.push(b);
-                }
-            } else {
-                if l < 0xF {
-                    data.push(0x50 + l as u8);
-                } else {
-                    data.push(0x5F);
-                    data.push(0x10);
-                    data.push(l as u8);
-                }
-                data.extend_from_slice(tag.as_bytes());
-            }
-        }
-        data.push(0x08);
+        let mut data = Vec::new();
+        Value::Array(tags.into_iter().map(|t| Value::String(t)).collect())
+            .to_writer_binary(&mut data)
+            .unwrap();
         Self { data }
     }
     pub fn parse(&self) -> Vec<String> {

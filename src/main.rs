@@ -29,25 +29,61 @@ fn main() {
 pub fn get<S: AsRef<str>>(f: S) {
     let f = f.as_ref();
 
-    for tag in Tags::from_path(f).parse() {
+    for tag in Tags::from_path(f)
+        .map(|tags| tags.parse())
+        .unwrap_or_default()
+    {
         println!("{}", tag);
     }
 }
 
-pub fn remove(f: &str, args: Vec<String>) {
-    panic!("Not implemented yet!")
-    // let tags = Tags::from_path(f);
-    // for tag in &args {}
+pub fn remove_all(f: &str) {
+    xattr::remove(f, TAG_ATTR_KEY).unwrap();
+}
+
+pub fn remove(f: &str, mut args: Vec<String>) {
+    if args.is_empty() {
+        remove_all(f);
+        return;
+    }
+    let tags = Tags::from_path(f)
+        .map(|tags| tags.parse())
+        .unwrap_or_default();
+    let tags = tags
+        .into_iter()
+        .filter(|t| {
+            if let Some(i) = args.iter().position(|u| t == u) {
+                args.remove(i);
+                false
+            } else {
+                true
+            }
+        })
+        .collect();
+    update(f, tags);
 }
 
 pub fn add(f: &str, args: Vec<String>) {
-    panic!("Not implemented yet!")
+    if args.is_empty() {
+        panic!("Usage: mactags add FILE TAGS...");
+    }
+    let mut tags = Tags::from_path(f)
+        .map(|tags| tags.parse())
+        .unwrap_or_default();
+    for tag in args {
+        if tags.iter().all(|t| t != &tag) {
+            tags.push(tag);
+        }
+    }
+    update(f, tags);
 }
 
 pub fn update(f: &str, args: Vec<String>) {
-    panic!("Not implemented yet!")
-    // let tag = Tags::from_tags(args);
-    // xattr::set(f, TAG_ATTR_KEY, &tag.data).unwrap();
+    if args.is_empty() {
+        panic!("Usage: mactags update FILE TAGS...; use `mactags remove` to remove all tags.")
+    }
+    let tag = Tags::from_tags(args);
+    xattr::set(f, TAG_ATTR_KEY, &tag.data).unwrap();
 }
 
 fn print_help() {
