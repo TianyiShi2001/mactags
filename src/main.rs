@@ -1,6 +1,5 @@
-use mactags::Tags;
+use mactags::{Tags, TAG_ATTR_KEY};
 use std::env;
-use xattr;
 
 fn main() {
     // let args: Vec<String> = env::args().collect();
@@ -9,19 +8,19 @@ fn main() {
         .map_or_else(print_help, |first| match &first[..] {
             "get" | "g" => {
                 args.next()
-                    .map_or_else(|| eprintln!("Usage: mactag get FILENAME"), get);
+                    .map_or_else(|| eprintln!("Usage: mactags get FILE"), get);
             }
             "remove" | "rm" | "r" => args.next().map_or_else(
-                || eprintln!("Usage: mactag remove [TAGS...]"),
+                || eprintln!("Usage: mactags remove FILE [TAGS...]"),
                 |f| remove(&f, args.collect()),
             ),
             "add" | "a" => args.next().map_or_else(
-                || eprintln!("Usage: mactag add [TAGS...]"),
+                || eprintln!("Usage: mactags add FILE [TAGS...]"),
                 |f| add(&f, args.collect()),
             ),
             "update" | "u" => args.next().map_or_else(
-                || eprintln!("Usage: mactag update [TAGS...]"),
-                |f| add(&f, args.collect()),
+                || eprintln!("Usage: mactags update FILE [TAGS...]"),
+                |f| update(&f, args.collect()),
             ),
             f => get(f),
         });
@@ -47,8 +46,10 @@ pub fn add(f: &str, args: Vec<String>) {
 
 pub fn update(f: &str, args: Vec<String>) {
     panic!("Not implemented yet!")
+    // let tag = Tags::from_tags(args);
+    // xattr::set(f, TAG_ATTR_KEY, &tag.data).unwrap();
 }
 
 fn print_help() {
-    eprintln!("USAGE: mactag [get|remove|add|update] FILE [TAGS...]");
+    eprintln!("USAGE: mactags [get|remove|add|update] FILE [TAGS...]");
 }
